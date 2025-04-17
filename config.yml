@@ -1,0 +1,16 @@
+base: "http://localhost:34512"
+
+authentication:
+  server: "https://privateauth.equestria.dev/hub"
+  id: "7c0ba787-0783-43d4-b81c-84b7ce5193bb"
+  secret: "BpNmjWtLPaAy"
+  redirect: "http://localhost:34512/oauth2/callback"
+
+notifications:
+  server: "notifications.equestria.dev"
+  topic: "crashes"
+  user: "server"
+  password: "TamGBABr8ArYX6zLokgIv1ueHqSFy2krBvUZWgh4zzKnKHj7Ae"
+
+api:
+  token: "D7fxiB0OiCnTp4RXRMM3c2jlFDKAcgL7zTTVZrm+ycKnfKRWmD2FD+M6L34n4cIlDA+scHu7YHeAibAQ+vMR6Q=="

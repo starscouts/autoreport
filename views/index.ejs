@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Equestria.dev Crash Reporting</title>
+        <link href="/bootstrap/bootstrap.min.css" rel="stylesheet">
+        <script src="/bootstrap/bootstrap.bundle.min.js"></script>
+
+        <script>
+            document.originalTitle = document.title;
+
+            async function setStatus(status) {
+                document.getElementById("report-page-loading").style.display = "block";
+                document.getElementById("report-page-content").style.display = "none";
+
+                await fetch("/api/report/?id=" + window.currentReport.id + "&response=" + status, {
+                    method: "PATCH",
+                })
+
+                location.reload();
+            }
+
+            function timeAgo(time) {
+                if (!isNaN(parseInt(time))) {
+                    time = new Date(time).getTime();
+                }
+
+                let periods = ["sec.", "mn.", "hr.", "d.", "wk.", "mo.", "y.", "ages"];
+
+                let lengths = ["60", "60", "24", "7", "4.35", "12", "100"];
+
+                let now = new Date().getTime();
+
+                let difference = Math.round((now - time) / 1000);
+                let tense;
+                let period;
+
+                if (difference <= 10 && difference >= 0) {
+                    return "now";
+                } else if (difference > 0) {
+                    tense = "ago";
+                } else {
+                    tense = "later";
+                }
+
+                let j;
+
+                for (j = 0; difference >= lengths[j] && j < lengths.length - 1; j++) {
+                    difference /= lengths[j];
+                }
+
+                difference = Math.round(difference);
+
+                period = periods[j];
+
+                return `${difference} ${period} ${tense}`;
+            }
+
+            function showPage(page) {
+                Array.from(document.getElementsByClassName("page")).forEach((i) => {
+                    i.style.display = "none";
+                })
+
+                document.getElementById("page-" + page).style.display = "block";
+
+                if (document.getElementById("page-" + page).getAttribute("data-page-title") === null) {
+                    document.title = document.originalTitle;
+                } else {
+                    document.title = document.getElementById("page-" + page).getAttribute("data-page-title") + " - " + document.originalTitle;
+                }
+            }
+
+            async function loadReport(id) {
+                document.getElementById("report-page-loading").style.display = "block";
+                document.getElementById("report-page-content").style.display = "none";
+
+                window.currentReport = JSON.parse(await (await window.fetch("/api/report?id=" + id)).text());
+
+                document.getElementById("report-page-title").innerText = window.currentReport.error.message;
+
+                if (window.currentReport.error.stacktrace && window.currentReport.error.stacktrace.trim() !== "") {
+                    document.getElementById("report-page-stacktrace").innerText = window.currentReport.error.stacktrace;
+                } else {
+                    document.getElementById("report-page-stacktrace").innerText = "[no stack trace provided]";
+                }
+
+                if (window.currentReport.error.logs && window.currentReport.error.logs.trim() !== "") {
+                    document.getElementById("report-page-logs").innerText = window.currentReport.error.logs;
+                } else {
+                    document.getElementById("report-page-logs").innerText = "[no process logs provided]";
+                }
+
+                document.getElementById("report-page-service").innerText = window.currentReport.service;
+                document.getElementById("report-page-date").innerText = "...";
+                document.getElementById("report-page-date").setAttribute("data-update-date", window.currentReport.time);
+
+                switch (window.currentReport.severity) {
+                    case 0:
+                        severity = "Low";
+                        css = "report-severity-low";
+                        break;
+
+                    case 1:
+                        severity = "Medium";
+                        css = "report-severity-medium";
+                        break;
+
+                    case 2:
+                        severity = "High";
+                        css = "report-severity-high";
+                        break;
+
+                    case 3:
+                        severity = "Critical";
+                        css = "report-severity-critical";
+                        break;
+
+                    case 4:
+                        severity = "Fatal";
+                        css = "report-severity-fatal";
+                        break;
+                }
+
+                document.getElementById("report-page-severity").innerHTML = `<span class="report-severity ${css}">${severity}</span>`;
+
+                switch (window.currentReport.response) {
+                    case 0:
+                        status = "Open";
+                        css = "report-status-open";
+                        break;
+
+                    case 1:
+                        status = "Acknowledged";
+                        css = "report-status-acknowledged";
+                        break;
+
+                    case 2:
+                        status = "Closed";
+                        css = "report-status-ignored";
+                        break;
+
+                    case 3:
+                        status = "Shut up";
+                        css = "report-status-stfu";
+                        break;
+                }
+
+                document.getElementById("report-page-status").innerHTML = `<span class="report-severity ${css}">${status}</span>`;
+
+                document.getElementById("report-page-fix-message").innerText = window.currentReport.potentialFix ?? "No potential fix has been determined for this error";
+
+                if (window.currentReport.potentialFix) {
+                    document.getElementById("report-page-fix").classList.add("alert-success");
+                    document.getElementById("report-page-fix").classList.remove("alert-dark");
+                    document.getElementById("report-page-fix-message").style.fontStyle = "normal";
+                } else {
+                    document.getElementById("report-page-fix").classList.remove("alert-success");
+                    document.getElementById("report-page-fix").classList.add("alert-dark");
+                    document.getElementById("report-page-fix-message").style.fontStyle = "italic";
+                }
+
+                document.title = window.currentReport.error.message + " - " + document.originalTitle;
+                document.getElementById("report-page-loading").style.display = "none";
+                document.getElementById("report-page-content").style.display = "block";
+            }
+
+            function hash() {
+                window.parts = location.hash.substring(2).split("/");
+
+                if (parts[0] === "") {
+                    location.hash = "#/list";
+                    return;
+                }
+
+                if (parts[0] !== "list" && parts[1] !== "report") {
+                    showPage("error");
+                }
+
+                if (parts[0] === "list") {
+                    showPage("list");
+                }
+
+                if (parts[0] === "report") {
+                    loadReport(parts[1]);
+                    showPage("report");
+                }
+            }
+
+            window.addEventListener('hashchange', hash);
+            window.addEventListener('load', () => {
+                hash();
+
+                [...Array.from(document.getElementsByClassName("report-date")), document.getElementById("report-page-date")].forEach((i) => {
+                    let date = new Date(i.getAttribute("data-update-date"));
+                    i.innerText = timeAgo(date.getTime());
+                })
+
+                setInterval(() => {
+                    [...Array.from(document.getElementsByClassName("report-date")), document.getElementById("report-page-date")].forEach((i) => {
+                        let date = new Date(i.getAttribute("data-update-date"));
+                        i.innerText = timeAgo(date.getTime());
+                    })
+                }, 500);
+            });
+        </script>
+        <style>
+            .report-service {
+                opacity: .5;
+                vertical-align: middle;
+            }
+
+            .report-service:after {
+                content: ": ";
+            }
+
+            .report-severity, .report-status {
+                background: rgba(0, 0, 0, .1);
+                border: 1px solid rgba(0, 0, 0, .25);
+                padding: 2px 5px;
+                border-radius: 5px;
+                font-size: 12px;
+                vertical-align: middle;
+            }
+
+            .report-date {
+                background: rgba(191, 191, 191, 0.1);
+                border: 1px solid rgba(191, 191, 191, 0.25);
+                padding: 2px 5px;
+                border-radius: 5px;
+                font-size: 12px;
+                vertical-align: middle;
+            }
+
+            .report-severity-low, .report-status-ignored {
+                background: rgba(0, 113, 128, 0.1);
+                border: 1px solid rgba(0, 128, 128, 0.25);
+            }
+
+            .report-severity-medium, .report-status-acknowledged {
+                background: rgba(0, 128, 0, 0.1);
+                border: 1px solid rgba(0, 128, 0, 0.25);
+            }
+
+            .report-severity-high {
+                background: rgba(128, 111, 0, 0.1);
+                border: 1px solid rgba(128, 111, 0, 0.25);
+            }
+
+            .report-severity-critical, .report-status-open {
+                background: rgba(128, 0, 0, 0.1);
+                border: 1px solid rgba(128, 0, 0, 0.25);
+            }
+
+            .report-severity-fatal, .report-status-stfu {
+                background: rgba(128, 128, 128, 0.1);
+                border: 1px solid rgba(128, 128, 128, 0.25);
+            }
+
+            .report-title {
+                vertical-align: middle;
+            }
+
+            .dropdown-toggle {
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .dropdown-toggle:after {
+                display: none;
+            }
+        </style>
+    </head>
+
+    <body>
+        <br><br>
+
+        <div class="container page" id="page-list">
+            <h2>Error reports</h2>
+
+            <div class="list-group">
+                <% for (let report of reports) { %>
+                    <% if (report.response !== 0) { %><s><% } %>
+                    <a href="#/report/<%- report.id %>" class="list-group-item list-group-item-action report">
+                        <span class="report-service"><%- report.service %></span>
+                        <b class="report-title"><%- report.error.message %></b>
+                        <%
+
+                        switch (report.severity) {
+                            case 0:
+                                severity = "Low";
+                                css = "report-severity-low";
+                                break;
+
+                            case 1:
+                                severity = "Medium";
+                                css = "report-severity-medium";
+                                break;
+
+                            case 2:
+                                severity = "High";
+                                css = "report-severity-high";
+                                break;
+
+                            case 3:
+                                severity = "Critical";
+                                css = "report-severity-critical";
+                                break;
+
+                            case 4:
+                                severity = "Fatal";
+                                css = "report-severity-fatal";
+                                break;
+                        }
+
+                        %>
+                        <span class="report-severity <%- css %>"><%- severity %></span>
+                        <%
+
+                        switch (report.response) {
+                            case 0:
+                                status = "Open";
+                                css = "report-status-open";
+                                break;
+
+                            case 1:
+                                status = "Acknowledged";
+                                css = "report-status-acknowledged";
+                                break;
+
+                            case 2:
+                                status = "Closed";
+                                css = "report-status-ignored";
+                                break;
+
+                            case 3:
+                                status = "Shut up";
+                                css = "report-status-stfu";
+                                break;
+                        }
+
+                        %>
+                        <span class="report-status <%- css %>"><%- status %></span>
+                        <span class="report-date" data-update-date="<%- report.time %>">...</span>
+                    </a>
+                    <% if (report.response !== 0) { %></s><% } %>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="container page" id="page-report" data-page-title="Error report">
+            <a href="#/list">Back</a>
+
+            <div id="report-page-loading">
+                <h2>Error report</h2>
+                <p>Loading...</p>
+            </div>
+
+            <div id="report-page-content">
+                <h2 id="report-page-title"></h2>
+
+                <div id="report-page-details" class="alert-secondary alert">
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td style="padding-right: 10px;"><b>Service: </b></td>
+                                <td id="report-page-service"></td>
+                            </tr>
+                            <tr>
+                                <td style="padding-right: 10px;"><b>Date: </b></td>
+                                <td id="report-page-date"></td>
+                            </tr>
+                            <tr>
+                                <td style="padding-right: 10px;"><b>Severity: </b></td>
+                                <td id="report-page-severity"></td>
+                            </tr>
+                            <tr>
+                                <td style="padding-right: 10px;"><b>Status: </b></td>
+                                <td>
+                                    <span id="report-page-status"></span>
+                                    <div class="dropdown" style="display: inline-block;">
+                                        <a class="dropdown-toggle" data-bs-toggle="dropdown">Change...</a>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="event.preventDefault(); setStatus('none');">
+                                                    <span class="report-severity report-status-open">Open</span>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="event.preventDefault(); setStatus('acknowledged');">
+                                                    <span class="report-severity report-status-acknowledged">Acknowledged</span>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="event.preventDefault(); setStatus('ignored');">
+                                                    <span class="report-severity report-status-ignored">Closed</span>
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="event.preventDefault(); setStatus('stfu');">
+                                                    <span class="report-severity report-status-stfu">Shut up</span>
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="report-page-fix" class="alert-success alert">
+                    <b>Potential fix:</b> <span id="report-page-fix-message"></span>
+                </div>
+
+                <hr>
+                <h4>Stack trace</h4>
+                <pre id="report-page-stacktrace"></pre>
+
+                <hr>
+                <h4>Logs</h4>
+                <pre id="report-page-logs"></pre>
+
+                <hr>
+                <h4>System state</h4>
+                <p class="text-muted">Not implemented.</p>
+            </div>
+        </div>
+
+        <div class="container page" id="page-error" data-page-title="Not found">
+            <h2>Not found</h2>
+
+            <p>The URL you entered is not a valid URL in this app. <a href="#/list">Go home.</a></p>
+        </div>
+    </body>
+</html>
